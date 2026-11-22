@@ -1,3 +1,6 @@
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+#include <robzfg/apple_interpolator.h>
+#endif
 #include "qmlsettings.h"
 #include "sessionlog.h"
 
@@ -586,6 +589,26 @@ void QmlSettings::setUseZeroCopy(bool enabled)
 {
     settings->SetUseZeroCopy(enabled);
     emit useZeroCopyChanged();
+}
+
+bool QmlSettings::frameGenEnabled() const
+{
+    return settings->GetFrameGenEnabled();
+}
+
+void QmlSettings::setFrameGenEnabled(bool enabled)
+{
+    settings->SetFrameGenEnabled(enabled);
+    emit frameGenEnabledChanged();
+}
+
+bool QmlSettings::frameGenAvailable() const
+{
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+    return robzfg::AppleInterpolator::supported();
+#else
+    return false;
+#endif
 }
 
 bool QmlSettings::vulkanDeferredSwap() const

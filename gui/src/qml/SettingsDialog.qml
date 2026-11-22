@@ -782,9 +782,26 @@ DialogView {
                             KeyNavigation.priority: KeyNavigation.BeforeItem
                             KeyNavigation.up: zeroCopyCheck
                             KeyNavigation.left: hwDecoderCombo
+                            KeyNavigation.right: Chiaki.settings.frameGenAvailable ? frameGenCheck : zeroCopyCheck
                             KeyNavigation.down: windowTypeCombo
                             checked: Chiaki.settings.useZeroCopy
                             onToggled: Chiaki.settings.useZeroCopy = checked
+                        }
+
+                        Label {
+                            visible: Chiaki.settings.frameGenAvailable
+                            text: qsTr("Frame Generation (30 to 60 fps)")
+                        }
+
+                        C.CheckBox {
+                            id: frameGenCheck
+                            visible: Chiaki.settings.frameGenAvailable
+                            KeyNavigation.priority: KeyNavigation.BeforeItem
+                            KeyNavigation.up: frameGenCheck
+                            KeyNavigation.left: zeroCopyCheck
+                            KeyNavigation.down: windowTypeCombo
+                            checked: Chiaki.settings.frameGenEnabled
+                            onToggled: Chiaki.settings.frameGenEnabled = checked
                         }
                     }
 
