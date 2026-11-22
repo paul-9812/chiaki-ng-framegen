@@ -281,12 +281,19 @@ else()
 	message(STATUS "Setsu disabled")
 endif()
 
+if(CHIAKI_ENABLE_TESTS)
+	enable_testing()
+endif()
+
 if(CHIAKI_ENABLE_GUI)
+	if(APPLE)
+		# frame generation (30 fps game -> 60 fps on screen) with Apple's frame interpolation
+		add_subdirectory(framegen)
+	endif()
 	add_subdirectory(gui)
 endif()
 
 if(CHIAKI_ENABLE_TESTS)
-	enable_testing()
 	add_subdirectory(test)
 endif()
 
