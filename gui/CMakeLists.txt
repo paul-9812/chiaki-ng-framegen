@@ -141,6 +141,21 @@ endif()
 if(APPLE)
 	target_link_libraries(chiaki "-framework AVFoundation" "-framework IOKit")
 endif()
+if(APPLE)
+	# Frame generation: shows a 30 fps game at 60 fps with Apple's frame interpolation (macOS 26+).
+	target_sources(chiaki PRIVATE include/framegen.h src/framegen.cpp)
+	target_link_libraries(chiaki robzfg)
+	target_compile_definitions(chiaki PRIVATE CHIAKI_GUI_ENABLE_FRAMEGEN)
+	if(CHIAKI_ENABLE_TESTS)
+		add_executable(framegen-stage-test
+			include/framegen.h
+			src/framegen.cpp
+			${CMAKE_SOURCE_DIR}/framegen/test/framegen_stage_test.cpp)
+		target_include_directories(framegen-stage-test PRIVATE include ${CMAKE_SOURCE_DIR}/framegen/test)
+		target_link_libraries(framegen-stage-test PRIVATE robzfg chiaki-lib Qt::Core FFMPEG::avutil)
+		add_test(NAME framegen-stage COMMAND framegen-stage-test)
+	endif()
+endif()
 
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fanalyzer")
 set_target_properties(chiaki PROPERTIES
