@@ -168,6 +168,11 @@ public:
         valueFont.setBold(true);
 
         bitrateRow = makeRow(tr("Mbps"), QColor(QStringLiteral("#00a7ff")), titleFont, valueFont, bitrateValue);
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+        // frame generation: real frames per second > frames shown, and its cost or state
+        frameGenFpsRow = makeRow(tr("fps real > shown"), QColor(QStringLiteral("#00a7ff")), titleFont, valueFont, frameGenFpsValue);
+        frameGenStateRow = makeRow(tr("frame generation"), QColor(QStringLiteral("#00a7ff")), titleFont, valueFont, frameGenStateValue);
+#endif
         queueRow = makeRow(tr("queue depth avg"), QColor(QStringLiteral("#90caf9")), titleFont, valueFont, queueDepthValue);
         pendingRow = makeRow(tr("pending frame age"), QColor(QStringLiteral("#90caf9")), titleFont, valueFont, pendingAgeValue);
         packetLossRow = makeRow(tr("packet loss"), QColor(QStringLiteral("#ef9a9a")), titleFont, valueFont, packetLossValue);
@@ -176,6 +181,12 @@ public:
 
         outer->addWidget(panel, 0, Qt::AlignRight | Qt::AlignVCenter);
 
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+        if (backend && backend->qmlFrameGen()) {
+            connect(backend->qmlFrameGen(), &FrameGenStage::statsChanged, this, &StatsOverlayWidget::refresh);
+            connect(backend->qmlFrameGen(), &FrameGenStage::stateChanged, this, &StatsOverlayWidget::refresh);
+        }
+#endif
         connect(owner, &QmlMainWindow::queueDepthAverageChanged, this, &StatsOverlayWidget::refresh);
         connect(owner, &QmlMainWindow::pendingFrameAgeChanged, this, &StatsOverlayWidget::refresh);
         connect(owner, &QmlMainWindow::droppedFramesChanged, this, &StatsOverlayWidget::refresh);
@@ -263,6 +274,20 @@ public:
             packetLossValue->clear();
         }
 
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+        FrameGenStage *frameGen = backend ? backend->qmlFrameGen() : nullptr;
+        const bool frameGenOn = hasSession && frameGen && frameGen->enabled();
+        const bool generating = frameGenOn && frameGen->sourceFps() > 1.0 && frameGen->outputFps() > frameGen->sourceFps() * 1.3;
+        frameGenFpsRow->setVisible(frameGenOn);
+        frameGenStateRow->setVisible(frameGenOn);
+        if (frameGenOn) {
+            frameGenFpsValue->setText(QStringLiteral("%1 > %2").arg(qRound(frameGen->sourceFps())).arg(qRound(frameGen->outputFps())));
+            frameGenStateValue->setText(generating
+                ? tr("%1 ms").arg(frameGen->generateMs(), 0, 'f', 1)
+                : frameGen->status());
+        }
+#endif
+
         const int droppedFrames = owner ? owner->droppedFrames() : 0;
         droppedFramesValue->setText(QString::number(droppedFrames));
         droppedFramesRow->setVisible(droppedFrames > 0);
@@ -279,6 +304,12 @@ private:
     QPointer<QmlBackend> backend;
     QPointer<StreamSession> current_session;
     QWidget *bitrateRow = nullptr;
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+    QWidget *frameGenFpsRow = nullptr;
+    QWidget *frameGenStateRow = nullptr;
+    QLabel *frameGenFpsValue = nullptr;
+    QLabel *frameGenStateValue = nullptr;
+#endif
     QWidget *queueRow = nullptr;
     QWidget *pendingRow = nullptr;
     QWidget *packetLossRow = nullptr;
@@ -6757,7 +6788,7 @@ void QmlMainWindow::render()
     const bool timer_owned_playback = stream_active && mixer_active;
     const double present_submit_interval_s = timer_owned_playback
         ? present_interval_s
-        : stream_interval_s;
+        : (external_frame_pacing.loadAcquire() != 0 ? 0.0 : stream_interval_s);
     const qint64 present_interval_us = static_cast<qint64>(qMax(1.0, vsync_duration * 1000000.0) + 0.5);
     const bool pending_overflow_waiting = hasPendingFrameOverflow();
     const bool pending_frame_waiting = snapshotQueueDepth() >= effectiveQueueDepthLimit() || hasPendingFrame();

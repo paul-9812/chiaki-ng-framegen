@@ -361,6 +361,10 @@ class Settings : public QObject
 		void SetHardwareDecoder(const QString &hw_decoder);
 		bool GetUseZeroCopy() const { return settings.value("settings/use_zero_copy", true).toBool(); }
 		void SetUseZeroCopy(bool enabled) { settings.setValue("settings/use_zero_copy", enabled); }
+
+		// Frame generation (macOS 26+ on Apple silicon): a game that renders 30 fps is shown at 60 fps
+		bool GetFrameGenEnabled() const { return settings.value("settings/framegen_enabled", true).toBool(); }
+		void SetFrameGenEnabled(bool enabled) { settings.setValue("settings/framegen_enabled", enabled); }
 		bool GetVulkanDeferredSwap() const { return settings.value("settings/vulkan_deferred_swap", false).toBool(); }
 		void SetVulkanDeferredSwap(bool enabled) { settings.setValue("settings/vulkan_deferred_swap", enabled); }
 

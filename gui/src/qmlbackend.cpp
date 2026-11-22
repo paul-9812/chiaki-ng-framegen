@@ -296,6 +296,28 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     qmlRegisterUncreatableType<QmlSettings>(uri, 1, 0, "ChiakiSettings", {});
     qmlRegisterUncreatableType<StreamSession>(uri, 1, 0, "ChiakiSession", {});
 
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+    framegen = new FrameGenStage(this);
+    // CHIAKI_FRAMEGEN_SELFTEST=1 runs frame generation for a few seconds on synthetic 30 fps
+    // video and prints the outcome to stderr: a check that needs no console. With the value
+    // "quit" the application closes itself afterwards.
+    if (qEnvironmentVariableIsSet("CHIAKI_FRAMEGEN_SELFTEST")) {
+        FrameGenStage::Config selftest_config;
+        selftest_config.enabled = true;
+        selftest_config.target_fps = 60;
+        selftest_config.stream_fps = 30;
+        selftest_config.stream_width = 1920;
+        selftest_config.stream_height = 1080;
+        QTimer::singleShot(3000, this, [this, selftest_config]() {
+            const bool quit_after = qEnvironmentVariable("CHIAKI_FRAMEGEN_SELFTEST") == QStringLiteral("quit");
+            framegen->runSelfTest(selftest_config, {}, [quit_after](const FrameGenStage::SelfTestResult &) {
+                if (quit_after)
+                    QCoreApplication::quit();
+            });
+        });
+    }
+#endif
+
     QObject *frame_obj = new QObject();
     frame_thread = new QThread(frame_obj);
     frame_thread->setObjectName("frame");
@@ -540,6 +562,16 @@ void QmlBackend::teardownSession()
     if (QObject *frame_ctx = frame_thread ? frame_thread->parent() : nullptr) {
         QMetaObject::invokeMethod(frame_ctx, []() {}, Qt::BlockingQueuedConnection);
     }
+
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+    // No frame can reach the frame generation stage any more: stop its threads. Frames it had
+    // already sent towards the window belong to a run that is now over (see createSession).
+    if (framegen)
+        framegen->stop();
+    framegen_run.fetchAndAddRelaxed(1);
+    if (window)
+        window->setExternalFramePacing(false);
+#endif
 
     // 3) Safe now: schedule the deferred delete and drop the member.
     session->deleteLater();
@@ -972,6 +1004,37 @@ void QmlBackend::createSession(const StreamSessionConnectInfo &connect_info)
     session_info = connect_info;
     window->setStreamMaxFPS(connect_info.video_profile.max_fps);
     disable_zero_copy = !settings->GetUseZeroCopy();
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+    {
+        FrameGenStage::Config framegen_config;
+        framegen_config.enabled = settings->GetFrameGenEnabled();
+        framegen_config.target_fps = 60;
+        framegen_config.stream_fps = connect_info.video_profile.max_fps;
+        framegen_config.stream_width = static_cast<int>(connect_info.video_profile.width);
+        framegen_config.stream_height = static_cast<int>(connect_info.video_profile.height);
+        if (framegen_config.enabled) {
+            // frame generation reads the decoded picture, so frames must come back from the GPU
+            disable_zero_copy = true;
+        }
+        // with frame generation the stage decides when each frame is shown
+        window->setExternalFramePacing(framegen_config.enabled);
+        QmlMainWindow *present_window = window;
+        const quint64 present_run = framegen_run.fetchAndAddRelaxed(1) + 1;
+        framegen->start(framegen_config, [this, present_window, present_run](ChiakiFfmpegFrame frame, int32_t frames_lost, qint64 delivery_us) {
+            QMetaObject::invokeMethod(present_window, [this, present_window, present_run, frame, frames_lost, delivery_us]() mutable {
+                // The stage hands its frames over through the event queue, so the last ones can
+                // arrive after the stream has ended. Shown then, such a frame makes the window
+                // believe video has started again; a frame of a run that is over is dropped.
+                if (framegen_run.loadRelaxed() != present_run || !session) {
+                    if (frame.frame)
+                        av_frame_free(&frame.frame);
+                    return;
+                }
+                present_window->presentFrame(frame, frames_lost, delivery_us);
+            });
+        });
+    }
+#endif
     {
         QMutexLocker locker(&hw_transfer_state_mutex);
         logged_hw_transfer_formats.clear();
@@ -1117,6 +1180,11 @@ void QmlBackend::createSession(const StreamSessionConnectInfo &connect_info)
         session = new StreamSession(session_info, this);
     } catch (const Exception &e) {
         emit error(tr("Stream failed"), tr("Failed to initialize Stream Session: %1").arg(e.what()));
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+        framegen->stop();
+        framegen_run.fetchAndAddRelaxed(1);
+        window->setExternalFramePacing(false);
+#endif
         return;
     }
 
@@ -1153,6 +1221,13 @@ void QmlBackend::createSession(const StreamSessionConnectInfo &connect_info)
         }
 
         const qint64 delivery_us = static_cast<qint64>(chiaki_time_now_monotonic_us());
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+        if (framegen && framegen->enabled()) {
+            // the stage shows the frame (and the ones it generates) when each is due
+            framegen->submit(frame, frames_lost, delivery_us);
+            return;
+        }
+#endif
         QmlMainWindow *target_window = window;
         QMetaObject::invokeMethod(target_window, [target_window, frame, frames_lost, delivery_us]() mutable {
             target_window->presentFrame(frame, frames_lost, delivery_us);
