@@ -120,6 +120,9 @@ public:
     QmlMainWindow *qmlWindow() const;
     QmlSettings *qmlSettings() const;
     StreamSession *qmlSession() const;
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+    FrameGenStage *qmlFrameGen() const { return framegen; }
+#endif
     QList<QmlController*> qmlControllers() const;
 
     bool discoveryEnabled() const;
