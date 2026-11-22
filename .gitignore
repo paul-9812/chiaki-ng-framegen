@@ -39,3 +39,6 @@ chiaki.conf
 .cache/
 *.vscode
 site/
+
+# frame generation build (scripts/build-macos-framegen.sh)
+/.venv
