@@ -6757,7 +6757,7 @@ void QmlMainWindow::render()
     const bool timer_owned_playback = stream_active && mixer_active;
     const double present_submit_interval_s = timer_owned_playback
         ? present_interval_s
-        : stream_interval_s;
+        : (external_frame_pacing.loadAcquire() != 0 ? 0.0 : stream_interval_s);
     const qint64 present_interval_us = static_cast<qint64>(qMax(1.0, vsync_duration * 1000000.0) + 0.5);
     const bool pending_overflow_waiting = hasPendingFrameOverflow();
     const bool pending_frame_waiting = snapshotQueueDepth() >= effectiveQueueDepthLimit() || hasPendingFrame();

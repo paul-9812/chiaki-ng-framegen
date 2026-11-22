@@ -5,6 +5,9 @@
 #include "qmlmainwindow.h"
 #include "qmlcontroller.h"
 #include "qmlsettings.h"
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+#include "framegen.h"
+#endif
 
 #include <QObject>
 #include <QMutex>
@@ -288,6 +291,12 @@ private:
     QmlMainWindow *window = {};
     StreamSession *session = {};
     QThread *frame_thread = {};
+#ifdef CHIAKI_GUI_ENABLE_FRAMEGEN
+    // Frame generation (30 fps game -> 60 fps on screen). Every stream is one "run": frames
+    // that reach the window after their run has ended are dropped.
+    FrameGenStage *framegen = {};
+    QAtomicInteger<quint64> framegen_run = 0;
+#endif
     QTimer *psn_reconnect_timer = {};
     QTimer *psn_auto_connect_timer = {};
     QTimer *wakeup_start_timer = {};

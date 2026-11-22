@@ -225,6 +225,10 @@ private:
                                  qint64 present_submit_interval_us);
     void drainDeferredSwaps();
     void setStreamMaxFPS(unsigned int max_fps);
+    // With frame generation the stage decides when each frame is shown (twice as often as
+    // the stream delivers them); the renderer then presents frames as they come instead of
+    // spacing them by the stream's own frame interval.
+    void setExternalFramePacing(bool enabled) { external_frame_pacing.storeRelease(enabled ? 1 : 0); }
     void createSwapchain();
     void destroySwapchain();
     void resizeSwapchain();
@@ -385,6 +389,7 @@ private:
     QAtomicInteger<quint64> pending_reset_snapshot_generation = 0;
     QAtomicInteger<quint64> last_reset_snapshot_generation = 0;
     QAtomicInteger<int> stream_session_active = 0;
+    QAtomicInteger<int> external_frame_pacing = 0;
     QMutex kept_frame_mutex;
     AVFrame *kept_frame = nullptr;
     double kept_frame_pts = 0.0;
